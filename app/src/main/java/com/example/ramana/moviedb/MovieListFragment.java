@@ -1,6 +1,10 @@
 package com.example.ramana.moviedb;
 
 import android.content.Intent;
+import android.database.Cursor;
+import android.graphics.Bitmap;
+import android.graphics.BitmapFactory;
+import android.os.AsyncTask;
 import android.os.Bundle;
 import android.support.v4.app.Fragment;
 import android.util.Log;
@@ -12,12 +16,16 @@ import android.view.View;
 import android.view.ViewGroup;
 import android.widget.AdapterView;
 import android.widget.GridView;
+import android.widget.Toast;
+
+import com.example.ramana.moviedb.data.MovieContract.MovieEntry;
 
 import org.json.JSONArray;
 import org.json.JSONException;
 import org.json.JSONObject;
 
 import java.util.ArrayList;
+import java.util.Iterator;
 import java.util.List;
 
 public class MovieListFragment extends Fragment {
@@ -26,6 +34,7 @@ public class MovieListFragment extends Fragment {
     MovieAdapter movie_adapter;
     FetchImageTask fetch_images;
     String order_by;
+    private Boolean mFavourite = false;
     List<MovieImage> images = new ArrayList<MovieImage>();
 
     public MovieListFragment() {
@@ -37,11 +46,23 @@ public class MovieListFragment extends Fragment {
         super.onCreate(savedInstanceState);
         setHasOptionsMenu(true);
         order_by = getString(R.string.popularity);
+        setRetainInstance(true);
     }
 
     @Override
+    public void onSaveInstanceState(Bundle outState) {
+        super.onSaveInstanceState(outState);
+    }
+
+    @Override
+    public void onActivityCreated(Bundle savedInstanceState) {
+        super.onActivityCreated(savedInstanceState);
+    }
+
+
+    @Override
     public void onCreateOptionsMenu(Menu menu, MenuInflater inflater) {
-        inflater.inflate(R.menu.image_list_menu,menu);
+        inflater.inflate(R.menu.image_list_menu, menu);
     }
 
     @Override
@@ -56,41 +77,90 @@ public class MovieListFragment extends Fragment {
                 // Refresh list with highest movie rated first
                 refresh_list(getString(R.string.rating));
                 return true;
+            case R.id.fav:
+                Toast.makeText(getActivity(),"favourite",Toast.LENGTH_SHORT).show();
+                mFavourite=true;
+                new LoadFavourites().execute(mFavourite);
+                return true;
             default:
                 return super.onOptionsItemSelected(item);
         }
     }
 
 
+    public class LoadFavourites extends AsyncTask<Boolean,Void,List<MovieImage>>{
+
+        @Override
+        protected List<MovieImage> doInBackground(Boolean... params) {
+
+            final String[] projection = new String[]{
+                    MovieEntry.COLUMN_MOVIE_ID,
+                    MovieEntry.COLUMN_MOVIE_IMAGE,
+                    MovieEntry.COLUMN_MOVIE_NAME
+            };
+            List<MovieImage> MovieImageObjects;
+
+            Cursor movies = getActivity().getContentResolver()
+                    .query(MovieEntry.CONTENT_URI,
+                            projection,null,null,null);
+            if(movies == null)
+                return null;
+            MovieImageObjects = new ArrayList<MovieImage>(movies.getCount());
+            byte[] bytes;
+            Bitmap b;
+            int movie_id;
+            if(movies.moveToFirst()){
+                do{
+                    movie_id = Integer.parseInt(movies.getString(0));
+                    bytes = movies.getBlob(1);
+                    b = BitmapFactory.decodeByteArray(bytes, 0, bytes.length);
+                    MovieImageObjects.add(new MovieImage(b,movie_id));
+                }while (movies.moveToNext());
+            }
+            return MovieImageObjects;
+        }
+
+        @Override
+        protected void onPostExecute(List<MovieImage> list) {
+            super.onPostExecute(list);
+            if(list == null)
+                return;
+            movie_adapter.clear();
+            Iterator<MovieImage> itr = list.iterator();
+            while(itr.hasNext()){
+                movie_adapter.add(itr.next());
+            }
+        }
+    }
+
     @Override
     public View onCreateView(LayoutInflater inflater, ViewGroup container,
                              Bundle savedInstanceState) {
         View rootView = inflater.inflate(R.layout.fragment_main,container,false);
 
-        for(int i=0;i<4;i++){
-            images.add(new MovieImage(Integer.toString(R.drawable.loading),0));
+        if(savedInstanceState == null){
+            for(int i=0;i<4;i++)
+                images.add(new MovieImage(Integer.toString(R.drawable.loading),0));
         }
-
         movie_adapter = new MovieAdapter(getActivity(), images,new FetchMyDataCompleteListener());
-
         GridView movie_grid = (GridView) rootView.findViewById(R.id.movies_gridview);
         movie_grid.setAdapter(movie_adapter);
-
         movie_grid.setOnItemClickListener(new AdapterView.OnItemClickListener() {
             @Override
             public void onItemClick(AdapterView<?> parent, View view, int position, long id) {
                 //Toast.makeText(getActivity(),"id is "+Long.toString(id),Toast.LENGTH_SHORT).show();
                 MovieImage imageObject = (MovieImage) parent.getItemAtPosition(position);
 
-                Intent intent = new Intent( getActivity(),MovieDetail.class);
-                intent.putExtra("movie_id",id);
-                intent.putExtra("image_path",imageObject.getImage_path());
+                Intent intent = new Intent(getActivity(), MovieDetail.class);
+                intent.putExtra("movie_id", id);
+                intent.putExtra("image_path", imageObject.getImage_path());
                 startActivity(intent);
-
             }
         });
 
-        refresh_list(order_by);
+        if(savedInstanceState == null){
+            refresh_list(order_by);
+        }
 
         return rootView;
     }

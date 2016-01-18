@@ -54,7 +54,7 @@ import java.net.URL;
 public class MovieDetailFragment extends Fragment {
 
     public static final String LOG_TAG = MovieDetailFragment.class.getSimpleName();
-    public ShareActionProvider mShareActionProvider;
+    public static ShareActionProvider mShareActionProvider;
 
     public MovieDetailFragment() {
 
@@ -76,43 +76,11 @@ public class MovieDetailFragment extends Fragment {
         setHasOptionsMenu(true);
     }
 
-    @Override
-    public void onCreateOptionsMenu(Menu menu, MenuInflater inflater) {
-        inflater.inflate(R.menu.movie_detail, menu);
-
-        mShareActionProvider = new ShareActionProvider(getActivity());
-        MenuItemCompat.setActionProvider(menu.getItem(0), mShareActionProvider);
-
-    }
-
-    public Intent sharetrailer(String shareUrl){
-        Intent shareIntent = new Intent(Intent.ACTION_SEND);
-        shareIntent.setFlags(Intent.FLAG_ACTIVITY_NEW_DOCUMENT);
-        shareIntent.setType("text/plain");
-        shareIntent.putExtra(Intent.EXTRA_TEXT,shareUrl);
-
-        return shareIntent;
-    }
-
-    @Override
-    public boolean onOptionsItemSelected(MenuItem item) {
-        switch (item.getItemId()){
-            case R.id.action_share:
-               Log.v(LOG_TAG,"share Clicked");
-                break;
-            default:{
-                Log.v(LOG_TAG," Nothing  Clicked");
-                return super.onOptionsItemSelected(item);
-            }
-        }
-        return super.onOptionsItemSelected(item);
-    }
-
-
 
     @Override
     public View onCreateView(LayoutInflater inflater, ViewGroup container,
                              Bundle savedInstanceState) {
+
         View rootView = inflater.inflate(R.layout.fragment_movie_detail, container, false);
 
         DetailsHolder.title = (TextView)rootView.findViewById(R.id.text_movie_title);
@@ -155,7 +123,6 @@ public class MovieDetailFragment extends Fragment {
                     }
             }
         });
-
         if(!is_fav) {
             // that means the movie is not in favourites.
             // So we need to fetch the information from MovieDb API.
@@ -177,6 +144,41 @@ public class MovieDetailFragment extends Fragment {
         }
         return rootView;
     }
+
+    @Override
+    public void onCreateOptionsMenu(Menu menu, MenuInflater inflater) {
+        inflater.inflate(R.menu.movie_detail, menu);
+
+        mShareActionProvider = new ShareActionProvider(getActivity());
+        MenuItemCompat.setActionProvider(menu.getItem(0), mShareActionProvider);
+
+    }
+
+    public Intent sharetrailer(String shareUrl){
+        Intent shareIntent = new Intent(Intent.ACTION_SEND);
+        shareIntent.setFlags(Intent.FLAG_ACTIVITY_NEW_DOCUMENT);
+        shareIntent.setType("text/plain");
+        shareIntent.putExtra(Intent.EXTRA_TEXT, shareUrl);
+
+        return shareIntent;
+    }
+
+    @Override
+    public boolean onOptionsItemSelected(MenuItem item) {
+        switch (item.getItemId()){
+            case R.id.action_share:
+                Log.v(LOG_TAG,"share Clicked");
+                break;
+            default:{
+                Log.v(LOG_TAG," Nothing  Clicked");
+                return super.onOptionsItemSelected(item);
+            }
+        }
+        return super.onOptionsItemSelected(item);
+    }
+
+
+
 
     public Boolean fetchMovieFromDatabase(String movie_id){
         //Set movie details except trailers
@@ -304,7 +306,7 @@ public class MovieDetailFragment extends Fragment {
         Bitmap posterBitmap = ((BitmapDrawable) DetailsHolder.poster .getDrawable())
                 .getBitmap();
         ByteArrayOutputStream bos = new ByteArrayOutputStream();
-        posterBitmap.compress(Bitmap.CompressFormat.PNG, 60, bos);
+        posterBitmap.compress(Bitmap.CompressFormat.PNG, 100, bos);
         byte[] bytes = bos.toByteArray();
 
          //Content values for movie Entry
@@ -454,7 +456,6 @@ public class MovieDetailFragment extends Fragment {
             }
         } // End of on post execute
     }
-
 
     @Override
     public void onViewCreated(View view, Bundle savedInstanceState) {

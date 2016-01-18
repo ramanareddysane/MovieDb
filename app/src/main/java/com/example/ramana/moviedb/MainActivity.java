@@ -3,6 +3,8 @@ package com.example.ramana.moviedb;
 import android.os.Bundle;
 import android.support.design.widget.FloatingActionButton;
 import android.support.design.widget.Snackbar;
+import android.support.v4.app.Fragment;
+import android.support.v4.app.FragmentManager;
 import android.support.v7.app.AppCompatActivity;
 import android.support.v7.widget.Toolbar;
 import android.view.Menu;
@@ -27,6 +29,14 @@ public class MainActivity extends AppCompatActivity {
             }
         });
 
+        FragmentManager manager = getSupportFragmentManager();
+        Fragment gridfrag = manager.findFragmentByTag("Movie_List");
+
+        if(gridfrag == null || savedInstanceState == null){
+            getSupportFragmentManager().beginTransaction()
+                    .add(R.id.movie_container, new MovieListFragment(), "Movie_List")
+                    .commit();
+        }
     }
 
     @Override
