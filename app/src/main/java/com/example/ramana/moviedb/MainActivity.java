@@ -9,8 +9,6 @@ import android.view.Menu;
 import android.view.MenuItem;
 import android.view.View;
 
-import com.example.ramana.moviedb.data.MovieDBHelper;
-
 public class MainActivity extends AppCompatActivity {
 
     @Override
@@ -29,7 +27,6 @@ public class MainActivity extends AppCompatActivity {
             }
         });
 
-        this.deleteDatabase(MovieDBHelper.DATABASE_NAME);
     }
 
     @Override

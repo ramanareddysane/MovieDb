@@ -6,6 +6,7 @@ import android.content.Intent;
 import android.content.SharedPreferences;
 import android.database.Cursor;
 import android.graphics.Bitmap;
+import android.graphics.BitmapFactory;
 import android.graphics.drawable.BitmapDrawable;
 import android.net.Uri;
 import android.os.AsyncTask;
@@ -28,6 +29,7 @@ import android.widget.LinearLayout;
 import android.widget.TextView;
 import android.widget.Toast;
 
+import com.example.ramana.moviedb.data.MovieContract;
 import com.example.ramana.moviedb.data.MovieContract.MovieDetails;
 import com.example.ramana.moviedb.data.MovieContract.MovieEntry;
 import com.example.ramana.moviedb.data.MovieContract.MovieReviews;
@@ -52,8 +54,7 @@ import java.net.URL;
 public class MovieDetailFragment extends Fragment {
 
     public static final String LOG_TAG = MovieDetailFragment.class.getSimpleName();
-    private ShareActionProvider mShareActionProvider;
-    private Boolean mIsFavourite = false;
+    public ShareActionProvider mShareActionProvider;
 
     public MovieDetailFragment() {
 
@@ -79,12 +80,9 @@ public class MovieDetailFragment extends Fragment {
     public void onCreateOptionsMenu(Menu menu, MenuInflater inflater) {
         inflater.inflate(R.menu.movie_detail, menu);
 
-        mShareActionProvider = (ShareActionProvider) MenuItemCompat.getActionProvider(menu.getItem(0));
+        mShareActionProvider = new ShareActionProvider(getActivity());
+        MenuItemCompat.setActionProvider(menu.getItem(0), mShareActionProvider);
 
-        if(DetailsHolder.trailers.getChildCount()>0)
-            mShareActionProvider.setShareIntent(sharetrailer("Adfadf afd af adfefdf adf"));
-//        else
-//            Log.v(LOG_TAG," no trailers yet");
     }
 
     public Intent sharetrailer(String shareUrl){
@@ -130,18 +128,10 @@ public class MovieDetailFragment extends Fragment {
 
         Bundle extras = getActivity().getIntent().getExtras();
         final Long id = extras.getLong("movie_id");
-        String image_path = extras.getString("image_path");
-        Picasso.with(getActivity())
-                .load(image_path)
-                .placeholder(R.drawable.loading)
-                .fit()
-                .into(poster);
-        // Fetch movie details like rating overview etc.,.
-        new FetchMovieDetails(getActivity(), rootView).execute(id);
+        SharedPreferences preferences = PreferenceManager.getDefaultSharedPreferences(getActivity());
+        Boolean is_fav = preferences.getBoolean(Long.toString(id), false);
 
         CheckBox checkBox = (CheckBox)rootView.findViewById(R.id.fav_movie_checkbox);
-        SharedPreferences preferences = PreferenceManager.getDefaultSharedPreferences(getActivity());
-        Boolean is_fav = preferences.getBoolean(Long.toString(id),false);
         if(is_fav)
             checkBox.setChecked(is_fav);
         checkBox.setOnCheckedChangeListener(new CompoundButton.OnCheckedChangeListener() {
@@ -166,14 +156,155 @@ public class MovieDetailFragment extends Fragment {
             }
         });
 
+        if(!is_fav) {
+            // that means the movie is not in favourites.
+            // So we need to fetch the information from MovieDb API.
+            String image_path = extras.getString("image_path");
+            Picasso.with(getActivity())
+                    .load(image_path)
+                    .placeholder(R.drawable.loading)
+                    .fit()
+                    .into(poster);
+
+            // Fetch movie details like rating overview etc.,.
+            new FetchMovieDetails(getActivity(), rootView).execute(id);
+        }else {
+            if(fetchMovieFromDatabase(Long.toString(id))){
+                Toast.makeText(getActivity()," retrieved from database",Toast.LENGTH_SHORT).show();
+            }else
+                Toast.makeText(getActivity(),"Somthing gone wrong in " +
+                        "fetching movie details from database",Toast.LENGTH_SHORT).show();
+        }
         return rootView;
+    }
+
+    public Boolean fetchMovieFromDatabase(String movie_id){
+        //Set movie details except trailers
+        // and reviews
+        String[] projectionsforDetails = {
+                MovieEntry.TABLE_NAME+"."+MovieEntry.COLUMN_MOVIE_ID,
+                MovieEntry.COLUMN_MOVIE_NAME,
+                MovieEntry.COLUMN_MOVIE_IMAGE,
+                MovieDetails.COLUMN_MOVIE_RELEASEDATE,
+                MovieDetails.COLUMN_MOVIE_RATING,
+                MovieDetails.COLUMN_MOVIE_OVERVIEW
+        };
+        Cursor detailCursor = getActivity().getContentResolver()
+                .query(MovieDetails.CONTENT_URI.buildUpon().appendPath(movie_id).build(),
+                        projectionsforDetails, null, null, null);
+        if(detailCursor.moveToFirst()){
+             // Set movie title
+            DetailsHolder.title.setText(detailCursor.getString(1));
+             //Set movie poster image
+            byte[] bytes = detailCursor.getBlob(2);
+            Bitmap bitmap = BitmapFactory.decodeByteArray(bytes, 0, bytes.length);
+            DetailsHolder.poster.setImageBitmap(bitmap);
+             // Set release year
+            DetailsHolder.release_date.setText(detailCursor.getString(3));
+             //Set rating
+            DetailsHolder.rating.setText(detailCursor.getString(4));
+             // Set over view
+            DetailsHolder.overView.setText(detailCursor.getString(5));
+        }
+        detailCursor.close();
+
+        // Set Trailers for the movie if any
+        String[] trailerColumns = {
+                MovieContract.MovieTrailers.COLUMN_TRAILER_NAME,
+                MovieContract.MovieTrailers.COLUMN_TRAILER_KEYURL
+        };
+        Cursor trailerCursor = getActivity().getContentResolver()
+                .query(MovieTrailers.CONTENT_URI.buildUpon().appendPath(movie_id).build(),
+                        trailerColumns,
+                        MovieTrailers.COLUMN_MOVIE_ID + " = ? ",
+                        new String[]{movie_id},
+                        null);
+
+        View trailer;
+        if(trailerCursor.moveToFirst()){
+            do{
+                Log.v(LOG_TAG,"Trailer name is: "+ trailerCursor.getString(0));
+                trailer = LayoutInflater.from(getActivity())
+                        .inflate(R.layout.list_item_trailer,DetailsHolder.trailers,false);
+                ((TextView)trailer.findViewById(R.id.list_item_trailer_number)).setText(trailerCursor.getString(0));
+                trailer.setTag(trailerCursor.getString(1));
+
+                trailer.setOnClickListener(new View.OnClickListener() {
+                    @Override
+                    public void onClick(View v) {
+                        Intent intent = new Intent(Intent.ACTION_VIEW,
+                                Uri.parse("http://www.youtube.com/watch?v=" + v.getTag()));
+                        intent.setFlags(Intent.FLAG_ACTIVITY_NEW_DOCUMENT);
+                        if ((intent.resolveActivity(getActivity().getPackageManager())) != null) {
+                            startActivity(intent);
+                        }
+                    }
+                });
+                DetailsHolder.trailers.addView(trailer);
+            }while (trailerCursor.moveToNext());
+        } // End of adding all trailers
+        else {
+            TextView tv = new TextView(getActivity());
+            tv.setLayoutParams(new ViewGroup.LayoutParams(
+                    ViewGroup.LayoutParams.MATCH_PARENT,
+                    ViewGroup.LayoutParams.WRAP_CONTENT));
+            tv.setText("No trailers for this movie");
+            DetailsHolder.trailers.addView(tv);
+        }
+
+
+        // Set reviews about movie if any
+        String[] reviewColumns = {
+                MovieReviews.COLUMN_AUTHOR,
+                MovieReviews.COLUMN_REVIEW_CONTENT
+        };
+        Cursor reviewsCursor = getActivity().getContentResolver()
+                .query(MovieReviews.CONTENT_URI.buildUpon().appendPath(movie_id).build(),
+                        reviewColumns,
+                        MovieEntry.COLUMN_MOVIE_ID+" = ? ",
+                        new String[]{movie_id},
+                        null);
+        View review;
+        if(reviewsCursor.moveToFirst()){
+            do{
+                review = LayoutInflater.from(getActivity())
+                        .inflate(R.layout.list_item_movie_review, DetailsHolder.reviews,false);
+                ((TextView)review.findViewById(R.id.list_item_movie_review_author))
+                        .setText(reviewsCursor.getString(0));
+                ((TextView)review.findViewById(R.id.list_item_movie_review_content))
+                        .setText(reviewsCursor.getString(1));
+                DetailsHolder.reviews.addView(review);
+            }while (reviewsCursor.moveToNext());
+        }else {
+            // Add empty View to reviews layout
+            TextView empty = new TextView(getActivity());
+            empty.setLayoutParams(new ViewGroup.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT,
+                    ViewGroup.LayoutParams.WRAP_CONTENT));
+            empty.setText("No reviews for this movie");
+            DetailsHolder.reviews.addView(empty);
+        }
+
+        trailerCursor.close();
+        reviewsCursor.close();
+
+        // Set share Action Provider
+        View trailer1 = DetailsHolder.trailers.getChildAt(0);
+        if(trailer1 instanceof LinearLayout){
+            String youtubeUri = ("http://www.youtube.com/watch?v="+ trailer1.getTag());
+            if(mShareActionProvider != null){
+                mShareActionProvider.setShareIntent(sharetrailer(youtubeUri));
+                Toast.makeText(getActivity()," key is: "+trailer1.getTag(),Toast.LENGTH_SHORT).show();
+            }else
+                Toast.makeText(getActivity()," SAP is null "+trailer1.getTag(),Toast.LENGTH_SHORT).show();
+        }
+        return true;
     }
 
     public void addMovietoFavourites(Long id){
         Bitmap posterBitmap = ((BitmapDrawable) DetailsHolder.poster .getDrawable())
                 .getBitmap();
         ByteArrayOutputStream bos = new ByteArrayOutputStream();
-        posterBitmap.compress(Bitmap.CompressFormat.PNG, 100, bos);
+        posterBitmap.compress(Bitmap.CompressFormat.PNG, 60, bos);
         byte[] bytes = bos.toByteArray();
 
          //Content values for movie Entry
@@ -219,7 +350,7 @@ public class MovieDetailFragment extends Fragment {
 
             Cursor cursor = getActivity().getContentResolver()
                     .query(MovieEntry.CONTENT_URI,
-                            new String[]{MovieEntry.COLUMN_MOVIE_ID},null,null,null);
+                            new String[]{MovieEntry.COLUMN_MOVIE_ID}, null, null, null);
             Log.v(LOG_TAG,"No of rows in entry table are:" + cursor.getCount());
 
             retUri = getActivity().getContentResolver().insert(MovieDetails.CONTENT_URI, params[1]);
@@ -240,76 +371,96 @@ public class MovieDetailFragment extends Fragment {
             int count = DetailsHolder.trailers.getChildCount();
             Log.v(LOG_TAG,"there are "+ count + " trailers");
             final ContentValues[] trailers = new ContentValues[count];
-            for(int i=0;i<count;i++){
-                View trailerView = DetailsHolder.trailers.getChildAt(i);
-                String name = (String) ((TextView)trailerView
-                        .findViewById(R.id.list_item_trailer_number)).getText();
-                ContentValues trailer = new ContentValues();
-                trailer.put(MovieTrailers.COLUMN_MOVIE_ID, movie_id);
-                trailer.put(MovieTrailers.COLUMN_TRAILER_NAME, name);
-                trailer.put(MovieTrailers.COLUMN_TRAILER_KEYURL, (String) trailerView.getTag());
 
-                trailers[i] = trailer;
-            }
-            ////....Thread for storing trailers info in database.
-            new Thread(new Runnable() {
-                @Override
-                public void run() {
-                    int no_of_rows = getActivity().getContentResolver()
-                            .bulkInsert(MovieTrailers.CONTENT_URI,trailers);
-                    Log.v(LOG_TAG,"No of trailers inserted : " + no_of_rows);
+            if(count == 1 && (DetailsHolder.trailers.getChildAt(0) instanceof TextView)){
+                    // Child is empty text view
+                Toast.makeText(getActivity(),"No trailers",Toast.LENGTH_SHORT).show();
+                Log.v(LOG_TAG,"No trailers for this movie");
+            }else {
+                    // Child has trailers and fetch them
+                for(int i=0;i<count;i++){
+                    View trailerView = DetailsHolder.trailers.getChildAt(i);
+                    String name = (String) ((TextView)trailerView
+                            .findViewById(R.id.list_item_trailer_number)).getText();
+                    ContentValues trailer = new ContentValues();
+                    trailer.put(MovieTrailers.COLUMN_MOVIE_ID, movie_id);
+                    trailer.put(MovieTrailers.COLUMN_TRAILER_NAME, name);
+                    trailer.put(MovieTrailers.COLUMN_TRAILER_KEYURL, (String) trailerView.getTag());
+
+                    trailers[i] = trailer;
                 }
-            }).start();
+                ////....Thread for storing trailers info in database.
+                new Thread(new Runnable() {
+                    @Override
+                    public void run() {
+                        int no_of_rows = getActivity().getContentResolver()
+                                .bulkInsert(MovieTrailers.CONTENT_URI,trailers);
+                        Log.v(LOG_TAG,"No of trailers inserted : " + no_of_rows);
+                    }
+                }).start();
+            }
 
+            // Content Values for reviews
+            count = DetailsHolder.reviews.getChildCount();
+            Log.v(LOG_TAG, "There are " + count + " reviews for this movie");
+            if(count == 1 && (DetailsHolder.reviews.getChildAt(0) instanceof TextView)){
+                    // Child is empty text view
+                Toast.makeText(getActivity(),"No Reviews",Toast.LENGTH_SHORT).show();
+                Log.v(LOG_TAG,"No reviews for this movie");
+            }else {
+                    // We have to fetch reviews from layout
+                final ContentValues[] reviews = new ContentValues[count];
+                for(int i=0;i<count;i++){
+                    ContentValues review = new ContentValues();
+                    View reviewView = DetailsHolder.reviews.getChildAt(i);
+                    String author = (String) ((TextView)reviewView
+                            .findViewById(R.id.list_item_movie_review_author)).getText();
+                    String review_content = (String)((TextView)reviewView
+                            .findViewById(R.id.list_item_movie_review_content)).getText();
+                    review.put(MovieReviews.COLUMN_MOVIE_ID, movie_id);
+                    review.put(MovieReviews.COLUMN_AUTHOR, author);
+                    review.put(MovieReviews.COLUMN_REVIEW_CONTENT, review_content);
+                    reviews[i] = review;
+                }
+                // Thread for storing reviews in database
+                new Thread(new Runnable() {
+                    @Override
+                    public void run() {
+                        int no_of_reviews = getActivity().getContentResolver()
+                                .bulkInsert(MovieReviews.CONTENT_URI,reviews);
+                        Log.v(LOG_TAG,"No of reviews inserted: "+ no_of_reviews);
+                    }
+                }).start();
+            }
+
+            //Check whether trailers are inserted properly or not
             Cursor trailersCursor = getActivity().getContentResolver()
                     .query(MovieTrailers.CONTENT_URI,null,null,null,null);
             Log.v(LOG_TAG,"No of rows in trailers table are : "+trailersCursor.getCount());
             trailersCursor.close();
-            //.....................................................//
-            // COntent Values for reviews
-            count = DetailsHolder.reviews.getChildCount();
-            Log.v(LOG_TAG,"There are "+count+" reviews for this movie");
-            final ContentValues[] reviews = new ContentValues[count];
-            for(int i=0;i<count;i++){
-                ContentValues review = new ContentValues();
-                View reviewView = DetailsHolder.reviews.getChildAt(i);
-                String author = (String) ((TextView)reviewView
-                        .findViewById(R.id.list_item_movie_review_author)).getText();
-                String review_content = (String)((TextView)reviewView
-                        .findViewById(R.id.list_item_movie_review_content)).getText();
-                review.put(MovieReviews.COLUMN_MOVIE_ID, movie_id);
-                review.put(MovieReviews.COLUMN_AUTHOR, author);
-                review.put(MovieReviews.COLUMN_REVIEW_CONTENT, review_content);
-                reviews[i] = review;
-            }
-            // Thread for storing reviews in database
-            new Thread(new Runnable() {
-                @Override
-                public void run() {
-                    int no_of_reviews = getActivity().getContentResolver()
-                            .bulkInsert(MovieReviews.CONTENT_URI,reviews);
-                    Log.v(LOG_TAG,"No of reviews inserted: "+ no_of_reviews);
-                }
-            }).start();
+            // Check whether all reviews are added to database or not
             Cursor reviewCursor = getActivity().getContentResolver()
                     .query(MovieReviews.CONTENT_URI, null, null, null, null);
             Log.v(LOG_TAG, "Total no of rows in reviews table are: "
                     + reviewCursor.getCount());
             reviewCursor.close();
 
+                // Enter the movie to Shared Preferences favourites list
             SharedPreferences preferences = PreferenceManager.getDefaultSharedPreferences(getActivity());
             preferences.edit().putBoolean(movie_id,true).apply();
             if(preferences.contains(movie_id) && preferences.getBoolean(movie_id,false)){
                 Toast.makeText(getActivity(),"Movie has added to favourites",Toast.LENGTH_SHORT).show();
                 Log.v(LOG_TAG,"Movie added to Fav");
             }
-        }
+        } // End of on post execute
     }
+
 
     @Override
     public void onViewCreated(View view, Bundle savedInstanceState) {
 
     }
+
 
     public class FetchMovieDetails extends AsyncTask<Long, Void, String[]> {
 
@@ -449,6 +600,9 @@ public class MovieDetailFragment extends Fragment {
 
                 Log.v(LOG_TAG,"details are"+inpString);
 
+                if(inpString == null)
+                    return;
+
                 final String IMAGE_URI = "http://image.tmdb.org/t/p/w500";
 
                 JSONObject root = new JSONObject(inpString);
@@ -508,9 +662,23 @@ public class MovieDetailFragment extends Fragment {
 
                 trailers.addView(trailer);
             }
-                 String shareUrl = (String) DetailsHolder.trailers.getChildAt(0).getTag();
-                 if(mShareActionProvider != null)
-                     mShareActionProvider.setShareIntent(sharetrailer("http://www.youtube.com/watch?v=" + shareUrl));
+            if(DetailsHolder.trailers.getChildCount() > 0){
+                String shareUrl = (String) DetailsHolder.trailers.getChildAt(0).getTag();
+                if(mShareActionProvider != null)
+                    mShareActionProvider.setShareIntent(sharetrailer("http://www.youtube.com/watch?v=" + shareUrl));
+            }else{
+                 // Create empty text view
+                TextView empty = new TextView(mContext);
+                empty.setLayoutParams(new ViewGroup.LayoutParams(
+                        ViewGroup.LayoutParams.MATCH_PARENT,
+                        ViewGroup.LayoutParams.WRAP_CONTENT
+                ));
+                empty.setText("No trailers for this movie");
+                 // Attach to trailers layout
+                DetailsHolder.trailers.addView(empty);
+
+            }
+
         }
 
             // Parse reviews from json

@@ -43,7 +43,7 @@ public class MovieProvider extends ContentProvider {
 
         //This is inner join on movie entry and movie details
         //table that retrieves single row containing all info
-        //about tables.
+        //about movie.
 
         // movies INNER JOIN details ON (movies.movie_id = details.movie_id)
         sqLiteQueryBuilder.setTables(MovieEntry.TABLE_NAME
