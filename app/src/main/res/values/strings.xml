@@ -12,7 +12,10 @@
     <string name="default_movie_title">.......</string>
     <string name="image_description">Image Poster</string>
     <string name="default_movie_overview">Most of us can relate to kicking back on the couch and enjoying a movie with friends and family. In this project, you’ll build an app to allow users to discover the most popular movies playing.
-</string>
+    </string>
+
+    <string name="no_trailers">"No trailers for this movie"</string>
+    <string name="no_reviews">"No reviews for this movie"</string>
 
 
 </resources>

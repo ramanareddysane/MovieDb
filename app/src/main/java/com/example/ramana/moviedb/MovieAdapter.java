@@ -2,7 +2,6 @@ package com.example.ramana.moviedb;
 
 import android.content.Context;
 import android.graphics.Bitmap;
-import android.os.Build;
 import android.util.Log;
 import android.view.LayoutInflater;
 import android.view.View;
@@ -65,10 +64,6 @@ public class MovieAdapter extends ArrayAdapter<MovieImage> {
 
         if(offline){
             Bitmap bitmap = movieImage.getBitmap();
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.KITKAT) {
-                bitmap.setWidth(imageView.getMaxWidth());
-                bitmap.setHeight(imageView.getMaxHeight());
-            }
             imageView.setImageBitmap(bitmap);
         }
         else
