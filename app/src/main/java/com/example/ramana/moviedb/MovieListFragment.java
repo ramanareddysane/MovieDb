@@ -1,5 +1,6 @@
 package com.example.ramana.moviedb;
 
+import android.app.ProgressDialog;
 import android.content.Intent;
 import android.database.Cursor;
 import android.graphics.Bitmap;
@@ -32,9 +33,11 @@ public class MovieListFragment extends Fragment {
 
     final String LOG_TAG = MovieListFragment.class.getSimpleName();
     MovieAdapter movie_adapter;
-    FetchImageTask fetch_images;
     String order_by;
     private Boolean mFavourite = false;
+
+    ProgressDialog progressDialog;
+
     List<MovieImage> images = new ArrayList<MovieImage>();
 
     public MovieListFragment() {
@@ -45,6 +48,7 @@ public class MovieListFragment extends Fragment {
     public void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
         setHasOptionsMenu(true);
+        progressDialog = new ProgressDialog(getActivity());
         order_by = getString(R.string.popularity);
         setRetainInstance(true);
     }
@@ -91,6 +95,15 @@ public class MovieListFragment extends Fragment {
     public class LoadFavourites extends AsyncTask<Boolean,Void,List<MovieImage>>{
 
         @Override
+        protected void onPreExecute() {
+            progressDialog.setIndeterminate(true);
+            progressDialog.setCancelable(false);
+            progressDialog.setMessage("Getting movies from your favourite colection");
+            progressDialog.show();
+            super.onPreExecute();
+        }
+
+        @Override
         protected List<MovieImage> doInBackground(Boolean... params) {
 
             final String[] projection = new String[]{
@@ -122,14 +135,18 @@ public class MovieListFragment extends Fragment {
 
         @Override
         protected void onPostExecute(List<MovieImage> list) {
-            super.onPostExecute(list);
-            if(list == null)
+            if(progressDialog != null){
+                progressDialog.setMessage("Done ");
+                progressDialog.hide();
+            }
+            if(list == null) {
                 return;
+            }
             movie_adapter.clear();
             Iterator<MovieImage> itr = list.iterator();
-            while(itr.hasNext()){
+            while(itr.hasNext())
                 movie_adapter.add(itr.next());
-            }
+            super.onPostExecute(list);
         }
     }
 

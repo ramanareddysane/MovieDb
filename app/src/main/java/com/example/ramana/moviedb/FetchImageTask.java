@@ -4,6 +4,7 @@ package com.example.ramana.moviedb;
 ///////////////////Fetch Images from Movie Database/////////////////
 ////////////////////////////////////////////////////////////////////
 
+import android.app.ProgressDialog;
 import android.content.Context;
 import android.net.Uri;
 import android.os.AsyncTask;
@@ -18,6 +19,7 @@ import java.net.URL;
 
 public class FetchImageTask extends AsyncTask<String, Void, String> {
 
+    private ProgressDialog progressDialog;
     private final String LOG_TAG = MovieListFragment.class.getSimpleName();
     private AsyncTaskCompleteListener listener;
     private Context context;
@@ -25,6 +27,16 @@ public class FetchImageTask extends AsyncTask<String, Void, String> {
     public FetchImageTask(Context ctx,AsyncTaskCompleteListener listener){
         this.context = ctx;
         this.listener = listener;
+        progressDialog = new ProgressDialog(ctx);
+    }
+
+    @Override
+    protected void onPreExecute() {
+        progressDialog.setIndeterminate(true);
+        progressDialog.setCancelable(false);
+        progressDialog.setMessage("Getting movies from internet");
+        progressDialog.show();
+        super.onPreExecute();
     }
 
     @Override
@@ -91,6 +103,10 @@ public class FetchImageTask extends AsyncTask<String, Void, String> {
 
     @Override
     protected void onPostExecute(String result) {
+        if(progressDialog != null) {
+            progressDialog.setMessage("Done loading movies");
+            progressDialog.hide();
+        }
         if (result != null){
             listener.onTaskComplete(result);
         }

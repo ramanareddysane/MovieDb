@@ -1,7 +1,9 @@
 package com.example.ramana.moviedb;
 
+import android.app.ProgressDialog;
 import android.content.ContentValues;
 import android.content.Context;
+import android.content.DialogInterface;
 import android.content.Intent;
 import android.content.SharedPreferences;
 import android.database.Cursor;
@@ -58,6 +60,7 @@ public class MovieDetailFragment extends Fragment {
     public static ShareActionProvider mShareActionProvider;
     public static MovieTotalDetails mTotal_movie_details;
     public FetchMovieDetails fetchMovieDetails = null;
+    private ProgressDialog progressDialog;
 
     public MovieDetailFragment() {
 
@@ -87,7 +90,7 @@ public class MovieDetailFragment extends Fragment {
         ByteArrayOutputStream bos = new ByteArrayOutputStream();
         b.compress(Bitmap.CompressFormat.PNG, 100, bos);
         byte[] bytes = bos.toByteArray();
-        updateDetails.put(MovieEntry.COLUMN_MOVIE_IMAGE,bytes);
+        updateDetails.put(MovieEntry.COLUMN_MOVIE_IMAGE, bytes);
         mTotal_movie_details.setDetails(updateDetails);
 
         outState.putParcelable("movie_info", mTotal_movie_details);
@@ -101,6 +104,8 @@ public class MovieDetailFragment extends Fragment {
         final View rootView = inflater.inflate(R.layout.fragment_movie_detail, container, false);
         setViewHolder(rootView);
 
+        progressDialog = new ProgressDialog(getActivity(), DialogInterface.BUTTON_NEGATIVE);
+
         Bundle extras = getActivity().getIntent().getExtras();
         final Long id = extras.getLong("movie_id");
         SharedPreferences preferences = PreferenceManager.getDefaultSharedPreferences(getActivity());
@@ -108,9 +113,9 @@ public class MovieDetailFragment extends Fragment {
 
         if(savedInstanceState == null){
             mTotal_movie_details = new MovieTotalDetails();
-            if(!is_fav) {
-                if(!fetchMovieFromDatabase(Long.toString(id)));
-                Toast.makeText(getActivity(),"Somthing gone wrong in " +
+            if(is_fav) {
+                if(!fetchMovieFromDatabase(Long.toString(id)))
+                    Toast.makeText(getActivity(),"Somthing gone wrong in " +
                         "fetching movie details from database",Toast.LENGTH_SHORT).show();
             }else {
                 String image_path = getActivity().getIntent().getExtras().getString("image_path");
@@ -286,7 +291,7 @@ public class MovieDetailFragment extends Fragment {
         String author;
         String content;
         Map reviews = new HashMap();
-        if(reviewsCursor.moveToFirst()){
+        if(reviewsCursor!=null && reviewsCursor.moveToFirst()){
             do{
                 author = reviewsCursor.getString(0);
                 content = reviewsCursor.getString(1);
@@ -343,7 +348,14 @@ public class MovieDetailFragment extends Fragment {
             this.mContext = context;
         }
 
-        @Override
+            @Override
+            protected void onPreExecute() {
+                progressDialog.setMessage("saving movie as your favourite");
+                progressDialog.show();
+                super.onPreExecute();
+            }
+
+            @Override
         protected String doInBackground(ContentValues... params) {
               // Add Movie Entry to the database
             Uri retUri = getActivity().getContentResolver().insert(MovieEntry.CONTENT_URI, params[0]);
@@ -362,8 +374,9 @@ public class MovieDetailFragment extends Fragment {
 
         @Override
         protected void onPostExecute(String result) {
-            String movie_id = Long.toString(getActivity().getIntent().getLongExtra("movie_id", 0));
-
+            if(progressDialog != null)
+                    progressDialog.hide();
+                String movie_id = Long.toString(getActivity().getIntent().getLongExtra("movie_id", 0));
             /*
              *  Get Content values from trailers.
              *  First get no of child for trailers layout
@@ -456,6 +469,13 @@ public class MovieDetailFragment extends Fragment {
                 this.mContext = ctx;
                 this.mrootView = rootView;
         }
+
+        @Override
+        protected void onPreExecute() {
+                progressDialog.setCancelable(false);
+                progressDialog.setMessage("Getting your movie details");
+                progressDialog.show();
+            }
 
         @Override
         protected String[] doInBackground(Long... params) {
@@ -565,6 +585,9 @@ public class MovieDetailFragment extends Fragment {
 
         @Override
         protected void onCancelled() {
+            if(progressDialog != null) {
+                progressDialog.hide();
+            }
             cleanUpWork();
             super.onCancelled();
         }
@@ -584,6 +607,7 @@ public class MovieDetailFragment extends Fragment {
 
         @Override
         protected void onPostExecute(String[] result) {
+            progressDialog.setMessage("Done. Here is your movie");
             try {
                 String image_path = getActivity().getIntent().getExtras().getString("image_path");
                 if(image_path != null){
@@ -595,6 +619,9 @@ public class MovieDetailFragment extends Fragment {
                 setMovieDetails(ParseMovieDetailsFromJsonString(result[0]));
                 setMovieTrailers(parseJsonForTrailers(result[1]));;
                 setMovieReviews(parseReviewsFromJson(result[2]));;
+                // Close the progress Dialog if its present
+                if(progressDialog != null)
+                    progressDialog.hide();
             } catch (JSONException e) {
                 e.printStackTrace();
                 Log.v(LOG_TAG, "Error While Parsing Json Strings");
